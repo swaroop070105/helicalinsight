@@ -1,0 +1,86 @@
+diff --git a/MONGODB_INTEGRATION.md b/MONGODB_INTEGRATION.md
+new file mode 100644
+index 0000000..015388f
+--- /dev/null
++++ b/MONGODB_INTEGRATION.md
+@@ -0,0 +1,37 @@
++# MongoDB Driver Integration
++
++## What was changed
++`server/hi-repository/System/Admin/databaseDrivers.properties` registered MongoDB
++with a non-existent driver class (`mongoDb=...`, no `jdbc:` prefix) and a second,
++dead, duplicate entry (`com.helical.mongodb.MongoJdbcDriver`). Neither corresponded
++to a real class, so MongoDB never actually worked as a connection type even though
++`MongoConnectionFactory.java` already contains logic that specifically recognizes
++the driver class `mongodb.jdbc.MongoDriver`.
++
++The fix registers MongoDB the same way every other database in this file is
++registered (driver class = JDBC URL template + default port), using the driver
++class name that `MongoConnectionFactory` already expects:
++
++```properties
++#MongoDB (DbSchema open-source Mongo JDBC driver - jar must be placed in System/Drivers).
++#For Atlas/SRV connections use jdbc:mongodb+srv://{{hostName}}/{{database}} as the URL instead.
++mongodb.jdbc.MongoDriver=jdbc:mongodb://{{hostName}}:{{port}}/{{database}},27017
++```
++
++No other application code needed to change — this plugs into the existing,
++driver-agnostic connection framework (same mechanism used by Postgres, MySQL,
++Oracle, etc.), so no existing functionality is affected.
++
++## How to configure/use a MongoDB connection
++1. Download the open-source Mongo JDBC driver jar from
++   https://github.com/wise-coders/mongodb-jdbc-driver (or dbschema.com), and
++   place it in `server/hi-repository/System/Drivers/` — the same folder that
++   already holds `postgresql-42.7.8.jar`. It's picked up automatically at
++   runtime (no rebuild needed) by the app's driver directory watcher.
++2. Restart the application.
++3. In the Admin > Data Sources UI, create a new connection and select the
++   MongoDB driver (`mongodb.jdbc.MongoDriver`).
++4. Enter host, port (default `27017`), and database name — the JDBC URL is
++   built automatically from the template above. For MongoDB Atlas, use a
++   custom URL in the `jdbc:mongodb+srv://{{hostName}}/{{database}}` form instead.
++5. Save and test the connection.
+diff --git a/README.md b/README.md
+index 730909f..cba4b72 100644
+--- a/README.md
++++ b/README.md
+@@ -68,7 +68,7 @@ Helical Insight connects to virtually any modern data source through native conn
+ | Apache Hive | Excel | Oracle Database | Apache Hive | Firebird SQL |
+ | Presto | Google Sheets | SQL Server | YugabyteDB | Informix |
+ | Trino | JSON | SQL Server (Legacy) | Snowflake | Custom JDBC Driver |
+-| Snowflake | Parquet | IBM DB2 |  |  |
++| Snowflake | Parquet | IBM DB2 | MongoDB |  |
+ | Teradata | TSV | SAP HANA |  |  |
+ |  | Google Cloud Storage | SQLite |  |  |
+ 
+diff --git a/server/hi-repository/System/Admin/databaseDrivers.properties b/server/hi-repository/System/Admin/databaseDrivers.properties
+index 8e68277..0840539 100644
+--- a/server/hi-repository/System/Admin/databaseDrivers.properties
++++ b/server/hi-repository/System/Admin/databaseDrivers.properties
+@@ -14,11 +14,10 @@ org.apache.drill.jdbc.Driver=jdbc:drill:{{hostName}}:{{port}},31010
+ com.dremio.jdbc.Driver=jdbc:dremio:{{hostName}}:{{port}};schema={{database}},31010
+ 
+ 
+-#MongoDB
+-mongoDb=mongodb://{{hostName}}:{{port}}/{{database}}
++#MongoDB (DbSchema open-source Mongo JDBC driver - jar must be placed in System/Drivers).
++#For Atlas/SRV connections use jdbc:mongodb+srv://{{hostName}}/{{database}} as the URL instead.
++mongodb.jdbc.MongoDriver=jdbc:mongodb://{{hostName}}:{{port}}/{{database}},27017
+ 
+-#HelicalMongoDriver,add this for himongodriver to view in datasource section
+-#com.helical.mongodb.MongoJdbcDriver=mongodb+srv://{{hostName}}:{{port}}/{{database}},27017
+ #Oracle
+ oracle.jdbc.OracleDriver=jdbc:oracle:thin:@{{hostName}}:{{port}}:{{database}},1521
+ type.service.oracle.jdbc.OracleDriver=jdbc:oracle:thin:@{{hostName}}:{{port}}/{{database}},1521
+@@ -127,8 +126,7 @@ io.trino.jdbc.TrinoDriver=jdbc:trino://{{hostName}}:{{port}}/{{database}},8889
+ #http-driver
+ com.helical.HttpDriver=jdbc:{{hostName}}
+ 
+-#himongo
+-com.helical.mongodb.MongoJdbcDriver=mongodb://{{hostName}}:{{port}}/{{database}},27017
++
+ 
+ #flatfile
+ com.helical.FlatFileDriver=jdbc:flatfile:{{hostName}}
+\ No newline at end of file
